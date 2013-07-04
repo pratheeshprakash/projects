@@ -13,23 +13,23 @@ using namespace std;
 int pan=90,tilt=90,min_pan=1,max_pan=180,min_tilt=40,max_tilt=130; //keep min_pan and min_tilt above 0 otherwise error will occur
 char sendbuffer[10],readbuffer[99];
 
-HANDLE h = openSerialPort("COM4",B9600,one,off);//initiallise the comport cnage to your arduinos comport
+HANDLE h = openSerialPort("COM4",B9600,one,off);					//initiallise the comport cnage to your arduinos comport
 
 void movemotor()
 {
 // check if pan and tilt values lie between stipulated limits
 	if(pan<min_pan) 					
 		pan=min_pan;
-	else if(pan>max_pan) 					// check if values lie between spulated limits
+	else if(pan>max_pan) 									// check if values lie between spulated limits
 		pan=max_pan;	
 	if(tilt<min_tilt)
 		tilt=min_tilt;
 	else if(tilt>max_tilt)
 		tilt=max_tilt;
 		
-	sprintf(sendbuffer, "<P%cT%c>",pan,tilt);			// convert variables to character( transmission protocol "<Ppan_valueTtilt_value" 
+	sprintf(sendbuffer, "<P%cT%c>",pan,tilt);				// convert variables to character( transmission protocol "<Ppan_valueTtilt_value" 
 	writeToSerialPort(h,sendbuffer,strlen(sendbuffer));		// send serial command to motors
-	readFromSerialPort(h,readbuffer,99);
+	//readFromSerialPort(h,readbuffer,99); 					// Uncomment if arduino send Acknowledgment signals (for future use) 
 }
 void drawLine( Mat img, Point start, Point end )
 {
@@ -42,7 +42,7 @@ int main(int argc, char** argv)
 {
 	
 	VideoCapture capture;
-	capture.open(1);        // Open camera device 0 for default camera and 1 for external camera connected if any 
+	capture.open(1);        										// Open camera device 0 for default camera and 1 for external camera connected if any 
     
     if (!capture.isOpened())
 		{
@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 			
 	Mat frame;
 	// temporary variables only for debugging
-	int p=3,temp0=90,temp3=0,hue=170,s=160,v=60;
+	int p=3,temp0=90;
 	// variables used in program
 	int quit=0;
 	char text[50];
@@ -65,27 +65,27 @@ int main(int argc, char** argv)
     if (frame.empty())
         break;
 	
-	cvCreateTrackbar( "hue", "original", &hue, 255, NULL);
-	cvCreateTrackbar( "Saturation", "original", &s, 255, NULL);
-	cvCreateTrackbar( "value", "original", &v, 255, NULL);
+	//cvCreateTrackbar( "trackbar1", "original", &temp0, 255, NULL);
 	
-	cv::flip(frame,frame,1); // flip the image on X axis
-	//Convert image to hsv
-	Mat hsv;// HSV file of the image
-	cvtColor(frame, hsv, CV_BGR2HSV);
+	
+	cv::flip(frame,frame,1); 	// flip the image on X axis
+								//Convert image to hsv
+	Mat hsv;					// HSV file of the image
+	
 	//filter pixels with RED and store in BW binary image
-	GaussianBlur(frame.clone(), frame, Size(11,11), 0);
+	cvtColor(frame, hsv, CV_BGR2HSV);
+	Mat bw,bw1;
+	inRange(hsv, Scalar(165,160,60), Scalar(180,256,256), bw);	//red	first part // red is cyclic around 0-15 and 165 - 180 as suggested by Utkarsh(liquidmetal)
+	inRange(hsv, Scalar(0,160,60), Scalar(15,256,256), bw1);	//red second part 
+	bw|=bw1;													//combine both images
 	
-	Mat bw;
-	inRange(hsv, Scalar(hue,s,v), Scalar(180,256,256), bw);//red	
-	
-	imshow("hsv thresh",bw);
+	GaussianBlur(bw, bw, Size(11,11), 0);						// blur image to mix all the small blobs
 	
 	//look for blobs
 	vector< vector<Point> > contours;
 	findContours(bw.clone(), contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
 	
-	bw = Mat::zeros(bw.size(), bw.type());// reinitialise bw to store mask image
+	bw = Mat::zeros(bw.size(), bw.type());						// reinitialise bw to store mask image
 	
 	/*
 	Before drawing all contours you could also decide
@@ -128,9 +128,11 @@ int main(int argc, char** argv)
 		}
 	int l=(frame.cols/6),b=(frame.rows/6); // decides the size of the rectangle in which camera will not move	
 	Point pt1 = Point((frame.cols/2)-l,(frame.rows/2)-b),pt2 = Point((frame.cols/2)+l,(frame.rows/2)+b);	
-   	rectangle(frame, pt1,pt2, Scalar(0,255,255), 2, 8, 0 );
-	int speed=2;
+   	rectangle(frame, pt1,pt2, Scalar(0,255,255), 1, 8, 0 );
 	
+	//move the motors 
+	
+	int speed=3;
 	if(cen.x<pt1.x)
 	pan+=speed;
 	else if(cen.x>pt2.x)
@@ -140,17 +142,21 @@ int main(int argc, char** argv)
 	else if(cen.y>pt2.y)
 	tilt-=speed;
 	
-	if(cen.x==0 &&cen.y==0)		//centre servos if object not found
-	pan=90;tilt=90;
+	if(cen.x==0 && cen.y==0)		//centre servos if object not found
+	{
+		pan=90;
+		tilt=90;
+	}
 	
 	movemotor(); 				// send values to motor
 	
 	//put text on screen
-	sprintf(text, "%dby%d",(int) pt1.x,(int)pt1.y);	// convert variables to text so that they can be displayed on screen
-	putText(frame, text, Point(100,20),FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0, 0,0), 1, CV_AA);	// display text on screen
-	char text1[10];
-	sprintf(text1, "centre=%d,%d",(int)cen.x,(int)cen.y);	// convert variables to text so that they can be displayed on screen
-	putText(frame, text1, Point(100,50),FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0, 0,0), 1, CV_AA);	// display text on screen
+	//sprintf(text, "%dby%d",(int) pt1.x,(int)pt1.y);	// convert variables to text so that they can be displayed on screen
+	//putText(frame, text, Point(100,20),FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0, 0,0), 1, CV_AA);	// display text on screen
+	//char text1[10];
+	//sprintf(text1, "centre=%d,%d",(int)cen.x,(int)cen.y);	// convert variables to text so that they can be displayed on screen
+	//putText(frame, sendbuffer, Point(100,50),FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(0, 0,0), 1, CV_AA);	// display text on screen
+	
 	imshow("original",frame);
 		
 		
